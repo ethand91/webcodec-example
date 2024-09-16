@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>WebCodec Example</title>
+    <style>
+      body {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        margin: 0;
+      }
+
+      video, canvas {
+        width: 640px;
+        height: 480px;
+        border: 2px solid black;
+        margin: 0 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <video id="video" autoplay playsinline></video>
+
+    <canvas id="canvas" width="640" height="480"></canvas>
+
+    <script>
+      const videoElement = document.getElementById('video');
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d');
+      let videoEncoder;
+
+      const initEncoder = () => {
+        videoEncoder = new VideoEncoder({
+          output: (frame) => {
+            //console.log('new frame', frame);
+          },
+          error: (error) => {
+            console.error('decode error', error);
+          }
+        });
+
+        videoEncoder.configure({
+          codec: 'vp8',
+          width: 640,
+          height: 480,
+          bitrate: 1_000_000,
+          framerate: 30
+        });
+      };
+
+      const handleStream = (stream) => {
+        videoElement.srcObject = stream;
+
+        const videoTrack = stream.getVideoTracks()[0];
+        const processor = new MediaStreamTrackProcessor(videoTrack);
+        const reader = processor.readable.getReader();
+
+        const processFrames = async () => {
+          while (true) {
+            const { value: videoFrame, done } = await reader.read();
+
+            if (done) {
+              console.log('stream ended');
+
+              break;
+            }
+
+            ctx.drawImage(videoFrame, 0, 0, canvas.width, canvas.height);
+
+            const insertKeyFrame = true;
+            videoEncoder.encode(videoFrame, { keyframe: insertKeyFrame });
+
+            videoFrame.close();
+          }
+        };
+
+        processFrames();
+      };
+
+      initEncoder();
+
+      navigator.mediaDevices.getUserMedia({ video: true })
+        .then((stream) => handleStream(stream))
+        .catch((error) => console.error('failed to get camera', error));
+    </script>
+  </body>
+</html>
